@@ -1,4 +1,4 @@
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{copy, split};
 use tokio::net::TcpListener;
 
 #[tokio::main]
@@ -12,27 +12,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("New connection from: {}", addr);
 
         tokio::spawn(async move {
-            let mut socket = socket;
-            let mut buf = [0; 1024];
-
-            loop {
-                match socket.read(&mut buf).await {
-                    Ok(0) => {
-                        println!("Connection closed by {}", addr);
-                        break;
-                    }
-                    Ok(n) => {
-                        if let Err(e) = socket.write_all(&buf[..n]).await {
-                            eprintln!("Failed to write to socket for {}: {}", addr, e);
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to read from socket for {}: {}", addr, e);
-                        break;
-                    }
-                }
+            let (mut reader, mut writer) = split(socket);
+            if let Err(e) = copy(&mut reader, &mut writer).await {
+                eprintln!("Error copying data for {}: {}", addr, e);
             }
+            println!("Connection closed by {}", addr);
         });
     }
 }
